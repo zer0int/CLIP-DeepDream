@@ -48,9 +48,9 @@ Above is resblock (Residual Attention Block) number (0), the first one (input la
 - MLP: c_fc (fully connected layer) -> GELU activation function -> projection layer.
 - The "4096" in this case (CLIP ViT-L/14) - those are the AI's "features" that encode visual concepts.
 ------
-- This code visualize those features that have the highest activation value, w.r.t. the neurons that 'fire' most strongly during a forward pass ('salient features').
-- Alas, we are creating a Vision Transformer's Deep Dream, as CLIP will be "dreaming" (gradient ascent) with the neurons that amplify what is 'salient' to the model.
-- That won't necessarily be what you expect, though. For example, the reflection on the retina of a cat might just activate an angel neuron in CLIP (true story, I had that happen!), so CLIP might end up dreaming an angel onto your cat. =)
+- This code visualizes the features that have the highest activation value, w.r.t. the neurons that 'fire' most strongly during a forward pass ('salient features').
+- Next, we are alas creating a Vision Transformer's Deep Dream, as CLIP will be "dreaming" (gradient ascent) with the neurons that amplify what is 'salient' to the model.
+- That won't necessarily be what you expect, though. For example, a reflection on the retina of a cat might just activate an angel neuron in CLIP (true story, I had that happen!), so CLIP might end up dreaming an angel onto your cat. =)
 ------
 ## In general:
 
