@@ -11,8 +11,8 @@ As an image is worth 16x16 words, here's a CLIP Dream:
 ![clip-deepdream-my-ai](https://github.com/user-attachments/assets/6c9d8300-82cb-4dd4-b5f2-5a903496c3fd)
 
 
-- Just run `run_deepdream-with-CLIP.py` and start dreaming - check the code comments for how-to-use!
-- Pass your own image: `run_deepdream-with-CLIP.py --im path/to/img.png`
+- Just run `python run_deepdream-with-CLIP.py` and start dreaming - check the code comments for how-to-use!
+- Pass your own image: `python run_deepdream-with-CLIP.py --im path/to/img.png`
 
 ------
 🌟🌠🌌✨ Delve Deeper: ✨🌌🌠🌟
