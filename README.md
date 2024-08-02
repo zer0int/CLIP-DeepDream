@@ -1,4 +1,46 @@
 ### CLIP DeepDream 🤖💭
+
+## Update 02/AUG/24:
+
+## 🌟🌠 🤯 Deep Dream with a *full* CLIP model! (*=> using output*) 🤯 🌌✨
+### Or, in other words: CLIP as a stand-alone generative AI. Strangely. 🙃
+
+- Gradient Ascent: Optimize Text embeddings for cosine similarity with image embeddings
+- Projected Gradient Descent: Add Gaussian noise + Perturb towards CLIP 'opinion' (text)
+- Config examples:
+
+- `python run_full_PGD_dream_with_CLIP-conf_deepdream.py`
+- Bound by strong influence of original image; 'deepdream-like'
+
+- `python run_full_PGD_dream_with_CLIP-conf_unleashed.py`
+- Creative freedom for CLIP's multimodal neurons
+
+- `python run_full_PGD_dream_with_CLIP-conf_nobounds.py`
+- Unbound & guided by text embeddings, original image features (edges) disappear
+
+- Pass `--im path/to/img.jpg (.png, .jpeg)` to use your own image
+- 👉 Check the code for detailed information! ✅
+----
+![PGD-demo-image-best](https://github.com/user-attachments/assets/03b203d4-bf0e-4d12-aaff-5b62f56eb517)
+
+----
+
+Detailed explanation: GA
+
+- Use gradient ascent (rather than a human prompt) to optimize the text embeddings towards cosine similarity with the image embeddings.
+- Reason: Imagine you have a photo of a cat. You use "cat" and get a good cosine similarity. You and CLIP agree... But do you? If you had tested "tabby", you would have seen an even better cosine similarity. And if you exchange the background behind the cat from a sofa to a forest - without altering the cat in the foreground - you'd have "wildcat" with the highest cosine similarity. Because CLIP considers the background, the entire image, to make meaning. It doesn't matter if it's still your same old fluffy tabby pet cat - it's "wildcat" now (CLIP's truth).
+- Forcing human bias on CLIP with 'cat' can be useful in many scenarios. But not here. We want CLIP's textual 'opinion' of the image embeddings in the vision transformer. A best match.
+- And CLIP's 'opinion' is not even really as simple and 'makes sense!' as the above example. You'll see when you run the code. =)
+------
+Detailed explanation: PGD
+
+- Yes, that's technically an adversarial attack / -training method. But we're optimizing the image the opposite way.
+- We're optimizing towards the text embeddings - the words describing the salient features / what CLIP 'saw' in the image.
+- We're also heavily perturbing the image, for maximum visibility. And with heavy regularization. See code for details.
+- Like looking at a complex thing, then drawing it from mind. But in high-dimensional tensorial AI-weirdness. =)
+
+----
+
 ## 🌟🌠 Dreaming with CLIP Vision Transformers 🌌✨
 
 - Basically, it's Feature Activation Max Visualization.
