@@ -11,8 +11,8 @@ def fix_random_seed(seed: int = 6247423):
     import torch
     import numpy as np
     torch.manual_seed(seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
+    #torch.backends.cudnn.deterministic = True
+    #torch.backends.cudnn.benchmark = False
     random.seed(seed)
     np.random.seed(seed)
 

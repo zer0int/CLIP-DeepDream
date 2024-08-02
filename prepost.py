@@ -10,8 +10,8 @@ def fix_random_seed(seed: int = 6247423):
     import torch
     import numpy as np
     torch.manual_seed(seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
+    #torch.backends.cudnn.deterministic = False
+    #torch.backends.cudnn.benchmark = False
     random.seed(seed)
     np.random.seed(seed)
 
@@ -42,7 +42,7 @@ class Jitter(nn.Module):
 
 
 class ColorJitter(nn.Module):
-    def __init__(self, batch_size: int, shuffle_every: bool = False, mean: float = 1., std: float = 1., use_fixed_random_seed: bool = False):
+    def __init__(self, batch_size: int, shuffle_every: bool = False, mean: float = 1., std: float = 1., use_fixed_random_seed: bool = True):
         super(ColorJitter, self).__init__()
         if use_fixed_random_seed:
             fix_random_seed(seed=6247423)
@@ -62,7 +62,7 @@ class ColorJitter(nn.Module):
 
         
 class GaussianNoise(nn.Module):
-    def __init__(self, batch_size: int, shuffle_every: bool = False, std: float = 1., max_iter: int = 400, use_fixed_random_seed: bool = False):
+    def __init__(self, batch_size: int, shuffle_every: bool = False, std: float = 1., max_iter: int = 400, use_fixed_random_seed: bool = True):
         super(GaussianNoise, self).__init__()
         if use_fixed_random_seed:
             fix_random_seed(seed=6247423)
