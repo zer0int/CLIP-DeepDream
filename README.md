@@ -104,6 +104,7 @@ Above is resblock (Residual Attention Block) number (0), the first one (input la
 - If CLIP's features don't find anything to "latch onto" in the current tile, that tile may look "blurry" and lacking features.
 ------
 - Built on the awesome code of [github.com/hamidkazemi22/vit-visualization](https://github.com/hamidkazemi22/vit-visualization)
+- Original CLIP Gradient Ascent Script by Twitter / X: [@advadnoun](https://twitter.com/advadnoun)
 - Requires / is made for [OpenAI/CLIP](https://github.com/openai/CLIP)
 ------
 PS: I, a human, chose the word "delve". Very deliberately. The code was largely written by GPT-4o, based on my ideas (hybrid work). This readme.md was entirely written by human (me). I just love to cause a confusion and inverse roles, as GPT-4o never got to 'delve' in the code! =)
