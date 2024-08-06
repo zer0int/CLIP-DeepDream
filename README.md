@@ -1,5 +1,16 @@
 ### CLIP DeepDream 🤖💭
 
+## Update 06/AUG/24
+
+- Added option to use penultimate (or earlier) layer output to all scripts.
+- Added "run_full_PGD_dream_with_CLIP-conf_penultimate.py" as example for layer [-5].
+
+![layer-5-example](https://github.com/user-attachments/assets/f1b99e1a-ffaa-49e1-8caa-71e596cbf6b7)
+
+- Note: Due to the not-quite-intuitive way CLIP's neurons composit, results may be unexpected. For example:
+- 👓 + US-FLAG = Waldo, and "Where is Waldo?" is also known as "horrororienteering" to CLIP's text transformer. 🙃
+
+-----
 ## Update 02/AUG/24:
 
 ## 🌟🌠 🤯 Deep Dream with a *full* CLIP model! (*=> using output*) 🤯 🌌✨
