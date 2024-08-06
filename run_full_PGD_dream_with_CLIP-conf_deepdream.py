@@ -40,6 +40,9 @@ use_existing_embeds = True # Set 'True' to load previously computed embeddings, 
 
 # ============ PGD IMAGE GENERATION (manipulation) ============
 # These settings, by default, create a Deep Dream with strong adherence to the original image:
+    
+use_penultimate = False # 'True' to use penultimate layer, 'False' to use final output layer
+penlayer = -2 # -2 = actual penultimate layer. -1 = final. Try -5 -> set 'use_l2 = False' below for that.
 
 epsilon = 0.1 # Maximum deviation for projection
 lr = 0.05 # Learning rate. 0.02 = low, 0.10 = high
@@ -484,8 +487,14 @@ def apply_bilateral_filter_and_save(input_folder, output_suffix="_filtered", d=d
         cv2.imwrite(output_path, filtered_image)
         print(f"Filtered image saved to {output_path}")
 
+activations = {}
 
-def pgd_attack(model, tile_image, target_text_embedding, epsilon, alpha, iters, save_every=False, save_steps=10, tile_path='', use_momentum=True, make_overlay=True, use_l2=use_l2, reg_factor_l2=l2_value, lr_schedule=cosine_lr_schedule, swa_start=swa_start, swa_stop=swa_stop):
+def hook_fn(module, input, output):
+    activations['penultimate'] = output
+
+model.visual.transformer.resblocks[penlayer].mlp.c_proj.register_forward_hook(hook_fn)
+
+def pgd_attack(model, tile_image, target_text_embedding, epsilon, alpha, iters, save_every=False, save_steps=10, tile_path='', use_momentum=True, make_overlay=True, use_penultimate=use_penultimate, use_l2=use_l2, reg_factor_l2=l2_value, lr_schedule=cosine_lr_schedule, swa_start=swa_start, swa_stop=swa_stop):
     print(Fore.RED + Style.BRIGHT + f"\nGenerating PGD on tile {os.path.basename(tile_path)}... Iterations: {iters}" + Fore.RESET)
     use_l2=use_l2
     reg_factor_l2=l2_value
@@ -510,9 +519,15 @@ def pgd_attack(model, tile_image, target_text_embedding, epsilon, alpha, iters, 
         if lr_schedule:
             alpha = lr_schedule(i, iters)
 
-
         augmented_image = pre(tile_image)
-        output = model.encode_image(augmented_image)
+        _ = model.encode_image(augmented_image)
+        
+        if use_penultimate:
+            penultimate_output = activations['penultimate']
+            penultimate_output = model.visual.ln_post(penultimate_output)  # Apply ln_post
+            output = penultimate_output @ model.visual.proj
+        else:
+            output = model.encode_image(augmented_image)
         
         # Put a minus in front of torch, -torch.nn.functional.cosine_similarity and see what happens. :-)
         # PS: There is an antonym (many solutions, actually) to everything in CLIP (minimize cosine similarity). Usually really confusing.

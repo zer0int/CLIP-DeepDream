@@ -20,7 +20,7 @@ warnings.filterwarnings('ignore')
 scaler = GradScaler()
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 parser = argparse.ArgumentParser(description="CLIP Full Model DeepDream")
-parser.add_argument("--im", type=str, required=False, default="images/shoggoth.png", help="Input Image Path")
+parser.add_argument("--im", type=str, required=False, default="images/beachscene.png", help="Input Image Path")
 args = parser.parse_args()
 
 
@@ -41,8 +41,8 @@ use_existing_embeds = True # Set 'True' to load previously computed embeddings, 
 # ============ PGD IMAGE GENERATION (manipulation) ============
 # These settings, by default, create a Deep Dream with strong adherence to the original image:
 
-use_penultimate = False # 'True' to use penultimate layer, 'False' to use final output layer
-penlayer = -2 # -2 = actual penultimate layer. -1 = final. Try -5 -> set 'use_l2 = False' below for that.
+use_penultimate = True # 'True' to use penultimate layer, 'False' to use final output layer
+penlayer = -5 # -2 = actual penultimate layer. -1 = final. Try -5 -> set 'use_l2 = False' below for that.
 
 epsilon = 0.3 # Maximum deviation for projection
 lr = 0.05 # Learning rate. 0.02 = low, 0.10 = high
@@ -57,7 +57,7 @@ range_scale = 0.00 # RGB color range restriction. 0.0: none / off. 0.15: good fi
 warmup_fraction = 0.0 # used by def 'cosine_lr_schedule'; 0.1 => 10% of total iters to warm-up
 
 # Whether this needs adjustment heavily depends on range_scale setting (and the input image):
-use_l2 = True # L2 norm correction; set "True" if you get over-bright images. 'False' if too dark.
+use_l2 = False # L2 norm correction; set "True" if you get over-bright images. 'False' if too dark.
 l2_value = 1e-2 # Factor for L2 regularization
 
 use_momentum = True # Use momentum
