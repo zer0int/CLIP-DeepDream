@@ -1,9 +1,13 @@
 ### CLIP DeepDream 🤖💭
 
+![gitimage](https://github.com/user-attachments/assets/a7b193d5-aad3-46f7-8a1f-05dca8fe6a48)
+
+- Made with `run_full_PGD_dream_with_CLIP-conf_penultimate.py`
+-------
 ## Update 06/AUG/24
 
 - Added option to use penultimate (or earlier) layer output to all scripts.
-- Added "run_full_PGD_dream_with_CLIP-conf_penultimate.py" as example for layer [-5].
+- Added `run_full_PGD_dream_with_CLIP-conf_penultimate.py` as example for layer [-5].
 
 ![layer-5-example](https://github.com/user-attachments/assets/f1b99e1a-ffaa-49e1-8caa-71e596cbf6b7)
 
