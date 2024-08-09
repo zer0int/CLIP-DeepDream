@@ -1,8 +1,17 @@
 ### CLIP DeepDream 🤖💭
 
-![gitimage](https://github.com/user-attachments/assets/a7b193d5-aad3-46f7-8a1f-05dca8fe6a48)
+## Update 09/AUG/2024:
 
-- Made with `run_full_PGD_dream_with_CLIP-conf_penultimate.py`
+- Added option to use single image (instead of 4 tiles)
+- Added option to use Gaussian noise init instead of image for PGD
+- Added support for Long-CLIP, see: [beichenzbc/Long-CLIP](https://github.com/beichenzbc/Long-CLIP)
+- See [here](https://huggingface.co/BeichenZhang/LongCLIP-L/tree/main) and [here](https://huggingface.co/BeichenZhang/LongCLIP-B/tree/main) to download Long-CLIP checkpoints
+- Edit the `*longCLIP*.py` files and fill in `clipmodel='path/to/checkpoints/longclip-L.pt'` to use.
+
+Example for `*conf_penultimate.py`:
+
+![examples-git](https://github.com/user-attachments/assets/f73141e4-067b-47cb-ab23-bc349431fab5)
+
 -------
 ## Update 06/AUG/24
 
@@ -121,5 +130,9 @@ Above is resblock (Residual Attention Block) number (0), the first one (input la
 - Built on the awesome code of [github.com/hamidkazemi22/vit-visualization](https://github.com/hamidkazemi22/vit-visualization)
 - Original CLIP Gradient Ascent Script by Twitter / X: [@advadnoun](https://twitter.com/advadnoun)
 - Requires / is made for [OpenAI/CLIP](https://github.com/openai/CLIP)
+------
+![gitimage](https://github.com/user-attachments/assets/a7b193d5-aad3-46f7-8a1f-05dca8fe6a48)
+
+- Made with `run_full_PGD_dream_with_CLIP-conf_penultimate.py`
 ------
 PS: I, a human, chose the word "delve". Very deliberately. The code was largely written by GPT-4o, based on my ideas (hybrid work). This readme.md was entirely written by human (me). I just love to cause a confusion and inverse roles, as GPT-4o never got to 'delve' in the code! =)
