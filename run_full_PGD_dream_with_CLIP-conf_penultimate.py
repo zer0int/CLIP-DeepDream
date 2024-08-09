@@ -63,10 +63,14 @@ l2_value = 1e-2 # Factor for L2 regularization
 use_momentum = True # Use momentum
 alpha = 0.06 # 0.02 = low, 0.10 = high
 
+# Init image vs. Gaussian Noise / Use single image instead of tiles:
+generate_single = True # 'True' to generate single image instead of 4 tiles
+gaussian_init = True # 'True' to use Gaussian noise instead of image for PGD. Applies for tiles & single image alike.
+
 # Make CLIP adhere more towards the original image while balancing with what CLIP 'saw' initially:
 make_overlay = False # Overlay / inject original image with current optimization - set 'False' to turn off.
-swa_start = int(0.2 * iters) # Overlay from; percentage of total iterations - ignored if make_overlay=False
-swa_stop = int(0.6 * iters) # When to 'unleash' CLIP and let the AI manipulate the image w/o interference
+swa_start = int(0.15 * iters) # Overlay from; percentage of total iterations - ignored if make_overlay=False
+swa_stop = int(0.5 * iters) # When to 'unleash' CLIP and let the AI manipulate the image w/o interference
 
 # For post-processing bilateral filter (unrelated to CLIP, uses OpenCV):
 diameter = 0 # fixed pixel neighborhood to consider; 0 = determined by sigmaSpace 
@@ -371,7 +375,7 @@ def reassemble_tiles(tile_folder: str, final_folder: str):
 
         combined_image.save(os.path.join(final_folder, key))
 
-def save_intermediate_image(image_tensor, mean, std, step, image_path):
+def save_intermediate_image(image_tensor, mean, std, step, image_path, tile_idx):
     image_np = image_tensor.squeeze().cpu().detach().numpy().transpose(1, 2, 0)
     image_np = (image_np * 255).astype(np.uint8)   
    
@@ -379,7 +383,7 @@ def save_intermediate_image(image_tensor, mean, std, step, image_path):
     image = upscale_image(image_pil, scale_factor=2)
         
     base_name = os.path.basename(image_path).split('.')[0]
-    image.save(f'adv_steps/{base_name}_step{step}.png')
+    image.save(f'adv_steps/{tile_idx}_{base_name}_step{step}.png')
 
 def upscale_image(image, scale_factor):
     width, height = image.size
@@ -387,33 +391,41 @@ def upscale_image(image, scale_factor):
     upscaled_image = image.resize((new_width, new_height), Image.LANCZOS)
     return upscaled_image
 
-def evaluate_adversarial(model, image, target_text_embedding, epsilon, alpha, iters, save_every=False, save_steps=10, image_path='', use_momentum=use_momentum):
+def evaluate_adversarial(model, image, target_text_embedding, epsilon, alpha, iters, save_every=False, save_steps=10, image_path='', use_momentum=use_momentum, generate_single=generate_single, gaussian_init=gaussian_init):
     model.eval()
     image.requires_grad = True
-    output = model.encode_image(image)
-    clean_similarity = torch.nn.functional.cosine_similarity(output, target_text_embedding).mean().item()
-    # Scale and tile the input image
-    tile_folder = 'adv_steps'
-    scale_and_tile_image(image_path, input_dims, tile_folder)
+    clean_similarity = torch.nn.functional.cosine_similarity(model.encode_image(image), target_text_embedding).mean().item()
 
-    perturbed_tiles = []
-    for tile_file in sorted(os.listdir(tile_folder)):
-        tile_path = os.path.join(tile_folder, tile_file)
-        tile_image = load_image(tile_path).to(device).requires_grad_(True)
+    if generate_single:
+        # Directly optimize the entire image
+        perturbed_image = pgd_attack(model, image, target_text_embedding, epsilon, alpha, iters, save_every, save_steps, image_path=image_path, use_momentum=use_momentum, make_overlay=make_overlay, lr_schedule=cosine_lr_schedule, swa_start=swa_start, gaussian_init=gaussian_init)
+        reassembled_image = perturbed_image
+    else:
+        # Scale and tile the input image
+        tile_folder = 'adv_steps'
+        scale_and_tile_image(image_path, input_dims, tile_folder)
+
+        perturbed_tiles = []
+        for idx, tile_file in enumerate(sorted(os.listdir(tile_folder))):
+            tile_path = os.path.join(tile_folder, tile_file)
+            tile_image = load_image(tile_path).to(device).requires_grad_(True)
     
-        perturbed_tile = pgd_attack(model, tile_image, target_text_embedding, epsilon, alpha, iters, save_every, save_steps, tile_path=tile_path, use_momentum=use_momentum, make_overlay=make_overlay, lr_schedule=cosine_lr_schedule, swa_start=swa_start)
-        perturbed_tiles.append(perturbed_tile)
+            # Pass tile index to pgd_attack and save_intermediate_image
+            perturbed_tile = pgd_attack(model, tile_image, target_text_embedding, epsilon, alpha, iters, save_every, save_steps, image_path=image_path, use_momentum=use_momentum, make_overlay=make_overlay, lr_schedule=cosine_lr_schedule, swa_start=swa_start, gaussian_init=gaussian_init, tile_idx=idx + 1)
+            perturbed_tiles.append(perturbed_tile)
 
-    reassemble_tiles(tile_folder, 'full_final')
-    reassembled_image_path = os.path.join('full_final', os.path.basename(image_path))
-    reassembled_image = load_image(reassembled_image_path).to(device)
+        reassemble_tiles(tile_folder, 'full_final')
+        reassembled_image_path = os.path.join('full_final', os.path.basename(image_path))
+        reassembled_image = load_image(reassembled_image_path).to(device)
 
     # Evaluate cosine similarity on the full image vs. text embedding
-    output = model.encode_image(reassembled_image)
-    pgd_similarity = torch.nn.functional.cosine_similarity(output, target_text_embedding).mean().item()  
+    pgd_similarity = torch.nn.functional.cosine_similarity(model.encode_image(reassembled_image), target_text_embedding).mean().item()
     evaluate_all_steps(model, input_image_path, 'full_final', 'adv_plots')
 
     return clean_similarity, pgd_similarity, reassembled_image
+
+
+
    
 def range_penalty(image_tensor, range_scale):
     image_tensor = torch.clamp(image_tensor, 0, 1)
@@ -494,15 +506,13 @@ def hook_fn(module, input, output):
 
 model.visual.transformer.resblocks[penlayer].mlp.c_proj.register_forward_hook(hook_fn)
 
-def pgd_attack(model, tile_image, target_text_embedding, epsilon, alpha, iters, save_every=False, save_steps=10, tile_path='', use_momentum=True, make_overlay=True, use_penultimate=use_penultimate, use_l2=use_l2, reg_factor_l2=l2_value, lr_schedule=cosine_lr_schedule, swa_start=swa_start, swa_stop=swa_stop):
-    print(Fore.RED + Style.BRIGHT + f"\nGenerating PGD on tile {os.path.basename(tile_path)}... Iterations: {iters}" + Fore.RESET)
-    use_l2=use_l2
-    reg_factor_l2=l2_value
-    swa_start=swa_start
-    swa_stop=swa_stop
-    make_overlay=make_overlay
-    lr_schedule=cosine_lr_schedule
-    iters=iters
+def pgd_attack(model, image, target_text_embedding, epsilon, alpha, iters, save_every=False, save_steps=10, image_path='', use_momentum=True, make_overlay=True, use_penultimate=use_penultimate, use_l2=use_l2, reg_factor_l2=l2_value, lr_schedule=cosine_lr_schedule, swa_start=swa_start, swa_stop=swa_stop, gaussian_init=gaussian_init, tile_idx=None):
+    print(Fore.RED + Style.BRIGHT + f"\nGenerating PGD on image... Iterations: {iters}" + Fore.RESET)
+    
+    
+    if gaussian_init:
+        print(Fore.YELLOW + Style.BRIGHT + "Using Gaussian noise for initialization." + Fore.RESET)
+        image = torch.randn_like(image).to(device).requires_grad_(True)
     
     if make_overlay:
         print(Fore.YELLOW + Style.BRIGHT + f"Injecting original image, iterations from: {swa_start} to: {swa_stop}" + Fore.RESET)
@@ -512,14 +522,14 @@ def pgd_attack(model, tile_image, target_text_embedding, epsilon, alpha, iters, 
     normal_var_loss_fn = NormalVariation(p=2)
     color_var_loss_fn = ColorVariation(p=2)
     
-    swa_image = tile_image.clone().detach().to(device)
-    momentum = torch.zeros_like(tile_image).to(device)
-
+    swa_image = image.clone().detach().to(device)
+    momentum = torch.zeros_like(image).to(device)
+    
     for i in range(iters):
         if lr_schedule:
             alpha = lr_schedule(i, iters)
 
-        augmented_image = pre(tile_image)
+        augmented_image = pre(image)
         _ = model.encode_image(augmented_image)
         
         if use_penultimate:
@@ -528,63 +538,63 @@ def pgd_attack(model, tile_image, target_text_embedding, epsilon, alpha, iters, 
             output = penultimate_output @ model.visual.proj
         else:
             output = model.encode_image(augmented_image)
-        
+
         # Put a minus in front of torch, -torch.nn.functional.cosine_similarity and see what happens. :-)
         # PS: There is an antonym (many solutions, actually) to everything in CLIP (minimize cosine similarity). Usually really confusing.
-        # But if you ever wanted to know what the opposite of a Tomato or a Horse might be, have fun and put a "-" here:
+        # But if you ever wanted to know what the opposite of a Tomato or a Horse might be, have fun and put a "-" here:        
         loss = torch.nn.functional.cosine_similarity(output, target_text_embedding).mean()
 
         if use_l2:
-            reg_factor_l2 = reg_factor_l2
-            l2_reg = reg_factor_l2 * torch.norm(tile_image, p=2)
+            l2_reg = reg_factor_l2 * torch.norm(image, p=2)
             loss -= l2_reg
         
-        tv_loss = normal_var_loss_fn(tile_image)
+        tv_loss = normal_var_loss_fn(image)
         loss += 0.0000001 * tv_loss
 
-        color_var_loss = color_var_loss_fn(tile_image)
-        loss -=  0.0005 * color_var_loss
+        color_var_loss = color_var_loss_fn(image)
+        loss -= 0.0005 * color_var_loss
 
-        penalty = range_penalty(tile_image, range_scale)
+        penalty = range_penalty(image, range_scale)
         loss += penalty       
         
         model.zero_grad()
         loss.backward()
 
         if use_momentum:
-            grad = tile_image.grad
+            grad = image.grad
             if grad is not None:
                 grad = grad / torch.norm(grad, p=1)
                 momentum = 0.9 * momentum + grad
-                tile_image = (tile_image + alpha * momentum.sign())
-  
-  
+                image = (image + alpha * momentum.sign())
         else:
-            grad = tile_image.grad
+            grad = image.grad
             if grad is not None:
-                tile_image = tile_image + alpha * grad.sign()
+                image = image + alpha * grad.sign()
             else:
                 raise ValueError("Gradient is None. Ensure requires_grad is set to True and backward() is called.")       
 
         if make_overlay and i >= swa_start and i <= swa_stop:
-            weight = 0.75 # Give original == swa_image 75% weight and tile_image 25% weight
-            swa_image = (weight * swa_image + (1 - weight) * tile_image).detach().requires_grad_(True)
-            tile_image = swa_image
+            weight = 0.75  # Give original == swa_image 75% weight and image 25% weight
+            swa_image = (weight * swa_image + (1 - weight) * image).detach().requires_grad_(True)
+            image = swa_image
                 
         # Clamp perturbations to be within the epsilon range around the original image
-        tile_image = torch.clamp(tile_image, tile_image - epsilon, tile_image + epsilon).detach().requires_grad_(True)
+        image = torch.clamp(image, image - epsilon, image + epsilon).detach().requires_grad_(True)
         
         # Ensure the pixel values are within the valid range [0, 1]
-        tile_image.data = post(tile_image).data
+        image.data = post(image).data
         
         if save_every and (i + 1) % save_steps == 0:
-            save_intermediate_image(tile_image, mean, std, i + 1, tile_path)
+            save_intermediate_image(image, mean, std, i + 1, image_path, tile_idx)
         if i % checkin_step == 0:
             loss_value = loss.item()
             print(f"Iteration: {i} Loss: {loss_value:.4f}")
 
-    save_intermediate_image(tile_image, mean, std, iters, tile_path)
-    return tile_image
+    save_intermediate_image(image, mean, std, iters, image_path, tile_idx)
+    return image
+
+
+
 
 
 def evaluate_and_plot_similarity(model, original_image, perturbed_image, image_name, step):
@@ -679,4 +689,3 @@ reassembled_image_pil.save(os.path.join('full_final', f'{imagename}.png'))
 full_final_folder = 'full_final'
 apply_bilateral_filter_and_save(full_final_folder)
 print(Fore.GREEN + Style.BRIGHT + f"\nAll done. Check the output folders!\n")
-

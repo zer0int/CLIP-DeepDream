@@ -1,8 +1,11 @@
 import torch
 import os
-import clip
+from longclipmodel import longclip
+from longclipmodel.model_longclip import QuickGELU
+import longclipmodel.simple_tokenizer as simpletokenizer
 import numpy as np
 import torchvision.transforms as transforms
+from torchvision.transforms import Compose, Resize, CenterCrop, ToTensor, Normalize
 import torch.nn.functional as F
 import torch.nn as nn
 import matplotlib.pyplot as plt
@@ -16,19 +19,21 @@ from torch.cuda.amp import autocast, GradScaler
 import warnings
 from prepost import Clip, Tile, Jitter, RepeatBatch, ColorJitter
 from prepost import GaussianNoise
+from natsort import natsorted
 warnings.filterwarnings('ignore')
 scaler = GradScaler()
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 parser = argparse.ArgumentParser(description="CLIP Full Model DeepDream")
-parser.add_argument("--im", type=str, required=False, default="images/shoggoth.png", help="Input Image Path")
+parser.add_argument("--im", type=str, required=False, default="images/beachscene.png", help="Input Image Path")
 args = parser.parse_args()
 
 
 # ++ General CLIP model settings ++
-    
-clipmodel = "ViT-L/14"
+
+# https://github.com/beichenzbc/Long-CLIP and download the checkpoint(s) to use here:    
+clipmodel='path/to/checkpoints/longclip-L.pt'
 checkin_step = 10 # print loss every 
-input_dims = 224 # 336 for ViT-L/14@336px
+input_dims = 224
 
 # ============ TEXT EMBEDDINGS GRADIENT ASCENT ============
 # Optimize text embeddings for cosine similarity with image embeddings
@@ -40,11 +45,11 @@ use_existing_embeds = True # Set 'True' to load previously computed embeddings, 
 
 # ============ PGD IMAGE GENERATION (manipulation) ============
 # These settings, by default, create a Deep Dream with strong adherence to the original image:
-
+    
 use_penultimate = False # 'True' to use penultimate layer, 'False' to use final output layer
 penlayer = -2 # -2 = actual penultimate layer. -1 = final. Try -5 -> set 'use_l2 = False' below for that.
 
-epsilon = 0.3 # Maximum deviation for projection
+epsilon = 0.1 # Maximum deviation for projection
 lr = 0.05 # Learning rate. 0.02 = low, 0.10 = high
 iters = 500 # Total number of iteration steps
 
@@ -53,22 +58,22 @@ save_steps = 25 # Save ever n intermediate steps to 'adv_steps'
 
 stop_gaussian_noise = 100 # when to stop adding gaussian noise to the image
 use_fixed_random_seed=True # torch, numpy fixed random seed, only applies to image
-range_scale = 0.00 # RGB color range restriction. 0.0: none / off. 0.15: good fit to original image with 'wiggleroom'
-warmup_fraction = 0.0 # used by def 'cosine_lr_schedule'; 0.1 => 10% of total iters to warm-up
+range_scale = 0.15 # RGB color range restriction. 0.0: none / off. 0.15: good fit to original image with 'wiggleroom'
+warmup_fraction = 0.1 # used by def 'cosine_lr_schedule'; 0.1 => 10% of total iters to warm-up
 
 # Whether this needs adjustment heavily depends on range_scale setting (and the input image):
 use_l2 = True # L2 norm correction; set "True" if you get over-bright images. 'False' if too dark.
-l2_value = 1e-2 # Factor for L2 regularization
+l2_value = 1e-3 # Factor for L2 regularization
 
 use_momentum = True # Use momentum
-alpha = 0.06 # 0.02 = low, 0.10 = high
+alpha = 0.04 # 0.02 = low, 0.10 = high
 
 # Init image vs. Gaussian Noise / Use single image instead of tiles:
 generate_single = False # 'True' to generate single image instead of 4 tiles
 gaussian_init = False # 'True' to use Gaussian noise instead of image for PGD. Applies for tiles & single image alike.
 
 # Make CLIP adhere more towards the original image while balancing with what CLIP 'saw' initially:
-make_overlay = False # Overlay / inject original image with current optimization - set 'False' to turn off.
+make_overlay = True # Overlay / inject original image with current optimization - set 'False' to turn off.
 swa_start = int(0.2 * iters) # Overlay from; percentage of total iterations - ignored if make_overlay=False
 swa_stop = int(0.6 * iters) # When to 'unleash' CLIP and let the AI manipulate the image w/o interference
 
@@ -95,8 +100,8 @@ std = [0.26862954, 0.26130258, 0.27577711]
 os.makedirs('adv_PGD', exist_ok=True)
 os.makedirs('adv_plots', exist_ok=True)
 os.makedirs('adv_steps', exist_ok=True)
-os.makedirs('TOK', exist_ok=True)
-os.makedirs('txtembeds', exist_ok=True)
+os.makedirs('longTOK', exist_ok=True)
+os.makedirs('longtxtembeds', exist_ok=True)
 os.makedirs('full_final', exist_ok=True)
 final_folder = 'full_final'
 
@@ -122,7 +127,7 @@ def fix_random_seed(seed: int = 6247423):
     random.seed(seed)
     np.random.seed(seed)
 
-model, preprocess = clip.load(clipmodel, device=device, jit=False)
+model, preprocess = longclip.load(clipmodel, device=device)
 original_dtypes = save_original_dtypes(model)
 model = model.eval().float()
 
@@ -138,13 +143,13 @@ model = model.eval().float()
 Original Code by advadnoun; X: @advadnoun
 '''
 
-prompt = clip.tokenize('''''').numpy().tolist()[0]
+prompt = longclip.tokenize('''''').numpy().tolist()[0]
 prompt = [i for i in prompt if i != 0 and i != 49406 and i != 49407]
 
 sideX = input_dims
 sideY = input_dims
 
-tok = clip.simple_tokenizer.SimpleTokenizer()
+tok = simpletokenizer.SimpleTokenizer()
 bests = {1000:'None', 1001:'None', 1002:'None', 1003:'None', 1004:'None'}
 
 def clip_encode_text(gobble, text):
@@ -205,7 +210,7 @@ def checkin(loss, tx, lll):
         tokens = j.split()
         unique_tokens.update(tokens)
 
-    with open(f"TOK/tokens_{imagename}.txt", "w", encoding='utf-8') as f:
+    with open(f"longTOK/tokens_{imagename}.txt", "w", encoding='utf-8') as f:
         f.write(" ".join(unique_tokens))
 
 def load_image(img_path):
@@ -230,7 +235,7 @@ class Pars(torch.nn.Module):
         for jk, pt in enumerate(ptt):
             self.prompt[:, jk, pt] = 1 
         
-        self.pad = torch.zeros(batch_size, 77 - (many_tokens + len(prompt) + 1), 49408).cuda()
+        self.pad = torch.zeros(batch_size, 248 - (many_tokens + len(prompt) + 1), 49408).cuda()
         self.pad[:, :, 49407] = 1
 
     def forward(self):
@@ -280,8 +285,8 @@ def generate_target_text_embeddings(img_path, training_iterations):
             checkin(loss, tx, lll)
    
     target_text_embedding = tx.detach()
-    torch.save(target_text_embedding, f"txtembeds/{img_name}_text_embedding.pt")
-    print(Fore.GREEN + "\nText embedding saved to 'txtembeds'." + Fore.RESET)
+    torch.save(target_text_embedding, f"longtxtembeds/{img_name}_text_embedding.pt")
+    print(Fore.GREEN + "\nText embedding saved to 'longtxtembeds'." + Fore.RESET)
     return img, target_text_embedding, img_path
 #ENDOFTEXT
 
@@ -639,7 +644,7 @@ image = load_image(input_image_path)
 
 # Check whether to load existing embeddings, or compute new embeddings
 if use_existing_embeds:
-    embed_path = f"txtembeds/{imagename}_text_embedding.pt"
+    embed_path = f"longtxtembeds/{imagename}_text_embedding.pt"
     if os.path.exists(embed_path):
         target_text_embedding = torch.load(embed_path).to(device)
         print(Fore.GREEN + f"\nUsing existing embedding from {embed_path}\n" + Fore.RESET)
